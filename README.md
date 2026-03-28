@@ -1,4 +1,6 @@
-🌧️ 수학 산성비 (Math Acid Rain)
+[인디스쿨 벙벙벙벙벙 선생님 자료 참고]: https://soft-crisp-9828f2.netlify.app
+
+🌧️ 수학 산성비 게임(Math Acid Rain)
 
 떨어지는 수학 수식을 암산으로 풀며 연산 실력을 키우는 웹 기반 교육용 미니 게임입니다.
 HTML, CSS, JavaScript 단일 파일로 구성되어 있어 별도의 설치 없이 브라우저에서 바로 실행할 수 있습니다.
