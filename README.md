@@ -41,4 +41,4 @@ Lucide Icons
 
 🔗 참고 자료 (References)
 
-[인디스쿨 벙벙벙벙벙 선생님 자료 참고]([url](https://soft-crisp-9828f2.netlify.app))
+[인디스쿨 벙벙벙벙벙 선생님 자료 참고]https://soft-crisp-9828f2.netlify.app
