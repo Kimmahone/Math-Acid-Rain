@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="ko" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>수학 산성비</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Jua', sans-serif; }
+    
+    /* 화면 바깥(위)에서 시작해서 바닥 입력창 위까지만 떨어지도록 수정 */
+    @keyframes fall {
+      0% { top: -50px; }
+      100% { top: calc(100% - 20px); }
+    }
+    
+    @keyframes pop {
+      0% { transform: translateX(-50%) scale(1); opacity: 1; }
+      100% { transform: translateX(-50%) scale(1.5); opacity: 0; }
+    }
+    
+    @keyframes combo-pop {
+      0% { transform: scale(0); opacity: 0; }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    
+    @keyframes score-float {
+      0% { transform: translateY(0); opacity: 1; }
+      100% { transform: translateY(-50px); opacity: 0; }
+    }
+    
+    .problem {
+      /* transform 대신 top을 사용하여 위치 제어 (타이머 동기화 해결) */
+      animation: fall linear forwards;
+      position: absolute;
+      transform: translateX(-50%);
+    }
+    
+    .problem.correct {
+      /* 정답 시 제자리에서 펑 터지는 효과 */
+      animation: pop 0.3s ease-out forwards !important;
+    }
+    
+    .combo-text {
+      animation: combo-pop 0.5s ease-out;
+    }
+    
+    .score-pop {
+      animation: score-float 0.8s ease-out forwards;
+      pointer-events: none;
+    }
+    
+    body { box-sizing: border-box; }
+  </style>
+ </head>
+ <body class="h-full overflow-hidden">
+  <div id="app" class="h-full w-full bg-gradient-to-b from-blue-900 via-cyan-800 to-blue-950 relative flex flex-col">
+   
+   <!-- Start Screen -->
+   <div id="screen-start" class="h-full w-full flex flex-col items-center justify-center p-4 relative z-20">
+    <div class="text-6xl mb-4">🌧️</div>
+    <h1 id="game-title" class="text-4xl font-bold text-yellow-300 mb-2 text-center">수학 산성비</h1>
+    <p id="game-subtitle" class="text-white text-lg mb-8 text-center">떨어지는 문제를 풀어서 점수를 얻자!</p>
+    <div class="bg-white/10 backdrop-blur-sm rounded-3xl p-8 mb-8 max-w-md w-full">
+     <p class="text-white text-center mb-6">난이도를 선택하세요:</p>
+     <div class="space-y-3">
+      <button onclick="selectDifficulty('verySlow')" class="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg font-bold cursor-pointer"> 🐢 매우 느림 </button> 
+      <button onclick="selectDifficulty('slow')" class="w-full px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-lg font-bold cursor-pointer"> 🚶 느림 </button> 
+      <button onclick="selectDifficulty('normal')" class="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg hover:from-yellow-600 hover:to-orange-600 transition-all shadow-lg font-bold cursor-pointer"> 🏃 보통 </button> 
+      <button onclick="selectDifficulty('fast')" class="w-full px-6 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:from-orange-600 hover:to-red-700 transition-all shadow-lg font-bold cursor-pointer"> 💨 빠름 </button> 
+      <button onclick="selectDifficulty('veryFast')" class="w-full px-6 py-3 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg hover:from-red-600 hover:to-pink-700 transition-all shadow-lg font-bold cursor-pointer"> ⚡ 매우 빠름 </button>
+     </div>
+    </div>
+   </div>
+
+   <!-- Pause Screen -->
+   <div id="screen-pause" class="hidden h-full w-full flex items-center justify-center p-4 relative z-50 bg-black/60 backdrop-blur-sm absolute inset-0">
+    <div class="bg-blue-950 border-4 border-cyan-400 rounded-3xl p-8 text-center">
+     <div class="text-5xl mb-4">⏸</div>
+     <h2 class="text-4xl font-bold text-cyan-300 mb-6">일시정지</h2>
+     <div class="space-y-4">
+      <button onclick="resumeGame()" class="w-full px-6 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-lg rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg font-bold cursor-pointer">▶ 계속하기</button> 
+      <button onclick="quitGame()" class="w-full px-6 py-4 bg-gradient-to-r from-red-500 to-pink-600 text-white text-lg rounded-lg hover:from-red-600 hover:to-pink-700 transition-all shadow-lg font-bold cursor-pointer">그만하기</button>
+     </div>
+    </div>
+   </div>
+
+   <!-- Game Screen -->
+   <div id="screen-game" class="hidden h-full w-full flex flex-col p-4 relative z-20">
+    <!-- Header Stats -->
+    <div class="flex justify-between items-center mb-4 bg-white/10 backdrop-blur-sm rounded-2xl p-4">
+     <div class="text-center">
+      <div class="text-sm text-gray-300">점수</div>
+      <div id="score" class="text-3xl font-bold text-yellow-300">0</div>
+     </div>
+     <div class="text-center">
+      <div class="text-sm text-gray-300">콤보</div>
+      <div id="combo" class="text-3xl font-bold text-orange-400">0</div>
+     </div>
+     <div class="text-center">
+      <div class="text-sm text-gray-300">생명</div>
+      <div id="lives" class="text-3xl font-bold text-red-400">❤️❤️❤️❤️❤️</div>
+     </div>
+     <div class="text-center">
+      <div class="text-sm text-gray-300">시간</div>
+      <div id="timer" class="text-3xl font-bold text-cyan-300">0</div>
+     </div>
+    </div>
+
+    <!-- Game Controls -->
+    <div class="flex gap-3 mb-4 justify-center">
+     <button onclick="pauseGame()" id="pause-btn" class="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold transition-all cursor-pointer">⏸ 일시정지</button> 
+     <button onclick="quitGame()" class="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition-all cursor-pointer">그만하기</button>
+    </div>
+
+    <!-- Game Area -->
+    <div id="game-area" class="flex-1 relative bg-blue-900/30 rounded-2xl overflow-hidden border-2 border-cyan-400/30">
+     
+     <!-- Problems Container -->
+     <div id="problems-container" class="absolute inset-0"></div>
+
+     <!-- Input Area at Bottom (투명하게 수정) -->
+     <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-blue-950/80 to-transparent p-4 z-10 flex justify-center">
+      <input id="answer-input" type="text" placeholder="답을 입력하고 Enter" class="w-full max-w-lg px-4 py-3 text-xl rounded-lg text-center font-bold text-gray-900 bg-white/70 backdrop-blur-md border-2 border-transparent focus:outline-none focus:border-yellow-400 focus:bg-white transition-all shadow-lg" autocomplete="off">
+     </div>
+    </div>
+   </div>
+
+   <!-- Result Screen -->
+   <div id="screen-result" class="hidden h-full w-full flex flex-col items-center justify-center p-4 relative z-20">
+    <div class="text-6xl mb-4">🎊</div>
+    <h2 id="result-title" class="text-4xl font-bold text-yellow-300 mb-2">게임 종료!</h2>
+    <div class="bg-white/10 backdrop-blur-sm rounded-3xl p-8 max-w-md w-full mt-8">
+     <div class="space-y-6">
+      <div class="border-b border-white/20 pb-4">
+       <div class="text-sm text-gray-300 mb-1">난이도</div>
+       <div id="result-difficulty" class="text-2xl font-bold text-cyan-300">보통</div>
+      </div>
+      <div class="border-b border-white/20 pb-4">
+       <div class="text-sm text-gray-300 mb-1">총 생존 시간</div>
+       <div id="result-time" class="text-2xl font-bold text-cyan-300">0초</div>
+      </div>
+      <div class="border-b border-white/20 pb-4">
+       <div class="text-sm text-gray-300 mb-1">최고 콤보</div>
+       <div id="result-max-combo" class="text-2xl font-bold text-orange-400">0</div>
+      </div>
+      <div class="bg-gradient-to-r from-yellow-400 to-yellow-300 rounded-xl p-4">
+       <div class="text-sm text-gray-800 mb-1">최종 점수</div>
+       <div id="result-score" class="text-4xl font-bold text-gray-900">0</div>
+      </div>
+     </div>
+     <button onclick="resetGame()" class="w-full mt-8 px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-lg rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg font-bold cursor-pointer"> 다시 하기 </button>
+    </div>
+   </div>
+  </div>
+
+  <script>
+    const difficulties = {
+      verySlow: { speed: 25000, spawnRate: 6000, scoreBase: 10, label: '매우 느림' },
+      slow: { speed: 20000, spawnRate: 5000, scoreBase: 20, label: '느림' },
+      normal: { speed: 15000, spawnRate: 4000, scoreBase: 30, label: '보통' },
+      fast: { speed: 10000, spawnRate: 2500, scoreBase: 40, label: '빠름' },
+      veryFast: { speed: 6000, spawnRate: 1500, scoreBase: 50, label: '매우 빠름' }
+    };
+
+    const problemDatabase = [
+      // 1. 덧셈, 뺄셈이 섞여있는 식 (하) - 기존 10문제
+      { text: '15 + 8 - 4', level: '하' },
+      { text: '20 - 5 + 12', level: '하' },
+      { text: '35 - (10 + 5)', level: '하' },
+      { text: '40 + 15 - 20', level: '하' },
+      { text: '50 - 25 - 10', level: '하' },
+      { text: '(30 - 12) + 8', level: '하' },
+      { text: '14 + 16 - 10', level: '하' },
+      { text: '45 - 20 + 5', level: '하' },
+      { text: '18 + (12 - 5)', level: '하' },
+      { text: '50 - (20 + 15)', level: '하' },
+      // 1. 덧셈, 뺄셈이 섞여있는 식 (하) - 추가 10문제
+      { text: '25 + 14 - 9', level: '하' },
+      { text: '40 - (15 + 8)', level: '하' },
+      { text: '55 - 20 + 12', level: '하' },
+      { text: '18 + 22 - 15', level: '하' },
+      { text: '60 - (30 - 15)', level: '하' },
+      { text: '32 + 18 - 20', level: '하' },
+      { text: '48 - 14 + 6', level: '하' },
+      { text: '17 + (23 - 10)', level: '하' },
+      { text: '70 - 25 - 15', level: '하' },
+      { text: '28 + 12 + 5', level: '하' },
+      
+      // 2. 곱셈, 나눗셈이 섞여있는 식 (하) - 기존 10문제
+      { text: '4 × 6 ÷ 2', level: '하' },
+      { text: '12 ÷ 3 × 5', level: '하' },
+      { text: '20 ÷ 4 × 3', level: '하' },
+      { text: '2 × 8 ÷ 4', level: '하' },
+      { text: '15 ÷ 5 × 6', level: '하' },
+      { text: '(24 ÷ 6) × 2', level: '하' },
+      { text: '30 ÷ (2 × 3)', level: '하' },
+      { text: '8 × 3 ÷ 6', level: '하' },
+      { text: '36 ÷ 9 × 4', level: '하' },
+      { text: '40 ÷ 8 × 5', level: '하' },
+      // 2. 곱셈, 나눗셈이 섞여있는 식 (하) - 추가 10문제
+      { text: '6 × 4 ÷ 3', level: '하' },
+      { text: '18 ÷ 6 × 5', level: '하' },
+      { text: '5 × 8 ÷ 4', level: '하' },
+      { text: '24 ÷ 8 × 7', level: '하' },
+      { text: '9 × 2 ÷ 6', level: '하' },
+      { text: '32 ÷ (4 × 2)', level: '하' },
+      { text: '16 ÷ 4 × 5', level: '하' },
+      { text: '7 × 6 ÷ 2', level: '하' },
+      { text: '45 ÷ 9 × 3', level: '하' },
+      { text: '3 × 8 ÷ 4', level: '하' },
+
+      // 3. 덧셈, 뺄셈, 곱셈이 섞여있는 식 (중) - 기존 10문제
+      { text: '5 + 3 × 4', level: '중' },
+      { text: '20 - 4 × 2', level: '중' },
+      { text: '(5 + 3) × 4', level: '중' },
+      { text: '10 + 2 × 5 - 3', level: '중' },
+      { text: '25 - (3 × 6)', level: '중' },
+      { text: '8 × 2 - 5 + 3', level: '중' },
+      { text: '12 + 4 × 2', level: '중' },
+      { text: '30 - 3 × 7', level: '중' },
+      { text: '(15 - 5) × 3', level: '중' },
+      { text: '4 × 5 + 12 - 2', level: '중' },
+      // 3. 덧셈, 뺄셈, 곱셈이 섞여있는 식 (중) - 추가 10문제
+      { text: '7 + 4 × 5', level: '중' },
+      { text: '30 - 6 × 3', level: '중' },
+      { text: '(8 + 2) × 6', level: '중' },
+      { text: '15 + 3 × 4 - 5', level: '중' },
+      { text: '40 - (5 × 7)', level: '중' },
+      { text: '9 × 3 - 10 + 4', level: '중' },
+      { text: '14 + 5 × 2', level: '중' },
+      { text: '50 - 4 × 8', level: '중' },
+      { text: '(20 - 5) × 2', level: '중' },
+      { text: '6 × 4 + 10 - 8', level: '중' },
+
+      // 4. 덧셈, 뺄셈, 나눗셈이 섞여있는 식 (중) - 기존 10문제
+      { text: '10 + 12 ÷ 3', level: '중' },
+      { text: '20 - 15 ÷ 5', level: '중' },
+      { text: '(10 + 14) ÷ 4', level: '중' },
+      { text: '30 ÷ 5 + 8 - 2', level: '중' },
+      { text: '25 - 20 ÷ 4', level: '중' },
+      { text: '18 ÷ (9 - 3)', level: '중' },
+      { text: '14 + 16 ÷ 4', level: '중' },
+      { text: '40 - 24 ÷ 6', level: '중' },
+      { text: '(20 - 4) ÷ 2', level: '중' },
+      { text: '15 ÷ 3 + 12 - 5', level: '중' },
+      // 4. 덧셈, 뺄셈, 나눗셈이 섞여있는 식 (중) - 추가 10문제
+      { text: '15 + 20 ÷ 4', level: '중' },
+      { text: '35 - 18 ÷ 6', level: '중' },
+      { text: '(15 + 25) ÷ 8', level: '중' },
+      { text: '40 ÷ 5 + 12 - 4', level: '중' },
+      { text: '50 - 36 ÷ 9', level: '중' },
+      { text: '24 ÷ (10 - 2)', level: '중' },
+      { text: '22 + 16 ÷ 8', level: '중' },
+      { text: '45 - 28 ÷ 7', level: '중' },
+      { text: '(30 - 6) ÷ 4', level: '중' },
+      { text: '21 ÷ 7 + 15 - 8', level: '중' },
+
+      // 5. 덧셈, 뺄셈, 곱셈, 나눗셈이 섞여있는 식 (상) - 기존 10문제
+      { text: '10 + 4 × 3 ÷ 2', level: '상' },
+      { text: '20 - 12 ÷ 3 × 2', level: '상' },
+      { text: '(5 + 3) × 4 ÷ 2', level: '상' },
+      { text: '15 + 10 ÷ 2 - 3 × 4', level: '상' },
+      { text: '30 ÷ (2 + 3) × 4', level: '상' },
+      { text: '5 × 6 - 20 ÷ 4', level: '상' },
+      { text: '8 + 12 ÷ 4 × 3 - 5', level: '상' },
+      { text: '(12 - 4) ÷ 2 + 3 × 5', level: '상' },
+      { text: '24 ÷ 3 + 2 × 4 - 5', level: '상' },
+      { text: '18 - 15 ÷ 5 × 2 + 4', level: '상' },
+      // 5. 덧셈, 뺄셈, 곱셈, 나눗셈이 섞여있는 식 (상) - 추가 10문제
+      { text: '12 + 6 × 4 ÷ 3', level: '상' },
+      { text: '25 - 16 ÷ 4 × 3', level: '상' },
+      { text: '(8 + 4) × 3 ÷ 6', level: '상' },
+      { text: '20 + 14 ÷ 2 - 4 × 3', level: '상' },
+      { text: '40 ÷ (3 + 5) × 6', level: '상' },
+      { text: '7 × 5 - 24 ÷ 3', level: '상' },
+      { text: '10 + 18 ÷ 6 × 4 - 8', level: '상' },
+      { text: '(20 - 5) ÷ 3 + 4 × 2', level: '상' },
+      { text: '36 ÷ 4 + 3 × 5 - 10', level: '상' },
+      { text: '30 - 20 ÷ 5 × 3 + 7', level: '상' }
+    ];
+
+    let gameState = {
+      score: 0, combo: 0, maxCombo: 0, timeLeft: 0, difficulty: 'normal',
+      isPlaying: false, isPaused: false,
+      problems: [], lives: 5, maxLives: 5, consecutiveCorrect: 0,
+      spawnInterval: null, timerInterval: null
+    };
+
+    function getRandomProblem() {
+      return problemDatabase[Math.floor(Math.random() * problemDatabase.length)];
+    }
+
+    function calculateAnswer(expression) {
+      try {
+        let calc = expression.replace(/×/g, '*').replace(/÷/g, '/');
+        const result = Function('"use strict"; return (' + calc + ')')();
+        return Math.round(result * 100) / 100;
+      } catch {
+        return null;
+      }
+    }
+
+    function createProblem() {
+      if (!gameState.isPlaying || gameState.isPaused) return;
+
+      const probData = getRandomProblem();
+      const expression = probData.text;
+      const level = probData.level;
+      const answer = calculateAnswer(expression);
+      
+      const container = document.getElementById('problems-container');
+      const problem = document.createElement('div');
+      const problemId = Date.now() + Math.random();
+      
+      let badgeColor = level === '상' ? 'bg-red-500' : (level === '중' ? 'bg-orange-500' : 'bg-green-500');
+      
+      problem.id = 'prob-' + problemId;
+      // whitespace-nowrap 클래스를 추가하여 수식이 무조건 한 줄로 나오도록 고정합니다.
+      problem.className = 'problem bg-gradient-to-b from-yellow-300 to-yellow-400 text-gray-900 px-4 py-3 rounded-lg shadow-lg font-bold text-lg hover:from-yellow-200 hover:to-yellow-300 transition-colors cursor-pointer whitespace-nowrap';
+      
+      // 난이도 뱃지와 수식 텍스트 추가
+      problem.innerHTML = `
+        <div class="absolute -top-3 -left-3 ${badgeColor} text-white text-xs rounded-full h-7 w-7 flex items-center justify-center border-2 border-white shadow-md font-black z-10">
+          ${level}
+        </div>
+        <span class="relative z-0">${expression}</span>
+      `;
+      
+      const difficulty = difficulties[gameState.difficulty];
+      const duration = difficulty.speed / 1000;
+      problem.style.animationDuration = `${duration}s`;
+      
+      const randomX = Math.random() * 80 + 10;
+      problem.style.left = randomX + '%';
+      container.appendChild(problem);
+      
+      const problemData = { id: problemId, element: problem, answer: answer, x: randomX, answered: false };
+      gameState.problems.push(problemData);
+      
+      // setTimeout 대신 animationend 이벤트를 사용하여 일시정지(pause)와 완벽하게 동기화합니다.
+      problem.addEventListener('animationend', (e) => {
+        // fall 애니메이션이 끝났을 때만 (문제가 바닥에 닿았을 때만 생명 차감)
+        if (e.animationName === 'fall') {
+          if (gameState.isPlaying && !problemData.answered) {
+            gameState.lives--;
+            updateUI();
+            if (gameState.lives <= 0) endGame();
+          }
+          problem.remove();
+          gameState.problems = gameState.problems.filter(p => p.id !== problemId);
+        }
+      });
+    }
+
+    function checkAnswer() {
+      const input = document.getElementById('answer-input');
+      const userAnswer = input.value.trim();
+      if (!userAnswer) return;
+      
+      const userNum = parseFloat(userAnswer);
+      if (isNaN(userNum)) {
+        shakeInput(input);
+        return;
+      }
+      
+      // 화면에 있는 문제들 중, 정답이 일치하는 '가장 오래된(하단에 가까운)' 문제를 먼저 파괴합니다.
+      let matchedProblem = null;
+      for (let i = 0; i < gameState.problems.length; i++) {
+        if (!gameState.problems[i].answered) {
+          const correctNum = parseFloat(gameState.problems[i].answer);
+          if (Math.abs(userNum - correctNum) < 0.01) {
+            matchedProblem = gameState.problems[i];
+            break; 
+          }
+        }
+      }
+      
+      if (!matchedProblem) {
+        // 오답 시: 생명을 깎지 않고 콤보만 초기화
+        gameState.consecutiveCorrect = 0;
+        gameState.combo = 0;
+        shakeInput(input);
+        updateUI();
+        return;
+      }
+      
+      // 정답을 맞춘 경우
+      matchedProblem.answered = true;
+      gameState.combo++;
+      gameState.consecutiveCorrect++;
+      gameState.maxCombo = Math.max(gameState.maxCombo, gameState.combo);
+      
+      if (gameState.consecutiveCorrect % 10 === 0 && gameState.lives < gameState.maxLives) {
+        gameState.lives++;
+        showLifeBonus();
+      }
+      
+      const difficulty = difficulties[gameState.difficulty];
+      const baseScore = difficulty.scoreBase;
+      let scoreEarned = baseScore;
+      
+      if (gameState.combo >= 5) scoreEarned = Math.floor(baseScore * 1.5);
+      if (gameState.combo >= 10) scoreEarned = baseScore * 2;
+      if (gameState.combo >= 15) scoreEarned = Math.floor(baseScore * 2.5);
+      
+      gameState.score += scoreEarned;
+      
+      // 블록 파괴 효과: 멈추게 한 뒤 제자리에서 터뜨립니다.
+      const currentTop = window.getComputedStyle(matchedProblem.element).top;
+      matchedProblem.element.style.top = currentTop;
+      matchedProblem.element.classList.add('correct');
+      
+      setTimeout(() => {
+        if (matchedProblem.element.parentNode) {
+          matchedProblem.element.remove();
+        }
+      }, 300);
+      
+      gameState.problems = gameState.problems.filter(p => p.id !== matchedProblem.id);
+      
+      showScorePop(scoreEarned, matchedProblem.x);
+      if (gameState.combo % 5 === 0) showComboPopup(gameState.combo);
+      
+      input.value = '';
+      updateUI();
+    }
+
+    function shakeInput(input) {
+      input.classList.add('ring-2', 'ring-red-500', 'bg-red-50');
+      setTimeout(() => {
+        input.classList.remove('ring-2', 'ring-red-500', 'bg-red-50');
+      }, 300);
+      input.value = '';
+    }
+
+    function showScorePop(score, x) {
+      const container = document.getElementById('problems-container');
+      const pop = document.createElement('div');
+      pop.className = 'score-pop absolute font-bold text-xl text-yellow-300';
+      pop.textContent = '+' + score;
+      pop.style.left = x + '%';
+      pop.style.top = '50%';
+      container.appendChild(pop);
+      setTimeout(() => pop.remove(), 800);
+    }
+
+    function showComboPopup(combo) {
+      const container = document.getElementById('problems-container');
+      const pop = document.createElement('div');
+      pop.className = 'combo-text absolute font-bold text-3xl text-orange-400 drop-shadow-lg';
+      pop.textContent = `🔥 ${combo} COMBO!`;
+      pop.style.left = '50%';
+      pop.style.top = '40%';
+      pop.style.transform = 'translateX(-50%)';
+      container.appendChild(pop);
+      setTimeout(() => pop.remove(), 1000);
+    }
+
+    function showLifeBonus() {
+      const container = document.getElementById('problems-container');
+      const pop = document.createElement('div');
+      pop.className = 'combo-text absolute font-bold text-3xl text-red-400 drop-shadow-lg';
+      pop.textContent = `💖 생명 +1 보너스!`;
+      pop.style.left = '50%';
+      pop.style.top = '35%';
+      pop.style.transform = 'translateX(-50%)';
+      container.appendChild(pop);
+      setTimeout(() => pop.remove(), 1200);
+    }
+
+    function updateUI() {
+      document.getElementById('score').textContent = gameState.score;
+      document.getElementById('combo').textContent = gameState.combo;
+      let livesDisplay = '';
+      for (let i = 0; i < gameState.lives; i++) livesDisplay += '❤️';
+      for (let i = gameState.lives; i < gameState.maxLives; i++) livesDisplay += '🖤';
+      document.getElementById('lives').textContent = livesDisplay;
+    }
+
+    function selectDifficulty(diff) {
+      gameState.difficulty = diff;
+      startGame();
+    }
+
+    function startGame() {
+      gameState = {
+        ...gameState,
+        score: 0, combo: 0, maxCombo: 0, timeLeft: 0,
+        isPlaying: true, isPaused: false,
+        problems: [], lives: 5, consecutiveCorrect: 0
+      };
+      
+      document.getElementById('problems-container').innerHTML = '';
+      document.getElementById('answer-input').value = '';
+      document.getElementById('answer-input').focus();
+      updateUI();
+      document.getElementById('timer').textContent = "0";
+      showScreen('game');
+      
+      startTimers();
+    }
+
+    function startTimers() {
+      const difficulty = difficulties[gameState.difficulty];
+      
+      gameState.spawnInterval = setInterval(() => {
+        createProblem();
+      }, difficulty.spawnRate);
+      
+      gameState.timerInterval = setInterval(() => {
+        if (gameState.isPlaying && !gameState.isPaused) {
+          gameState.timeLeft++;
+          document.getElementById('timer').textContent = gameState.timeLeft;
+        }
+      }, 1000);
+    }
+
+    function stopTimers() {
+      clearInterval(gameState.spawnInterval);
+      clearInterval(gameState.timerInterval);
+    }
+
+    function pauseGame() {
+      if (!gameState.isPlaying || gameState.isPaused) return;
+      gameState.isPaused = true;
+      stopTimers();
+      
+      document.querySelectorAll('.problem').forEach(prob => {
+        prob.style.animationPlayState = 'paused';
+      });
+      
+      document.getElementById('pause-btn').textContent = '▶ 계속하기';
+      showScreen('pause');
+    }
+
+    function resumeGame() {
+      if (!gameState.isPlaying || !gameState.isPaused) return;
+      gameState.isPaused = false;
+      startTimers();
+      
+      document.querySelectorAll('.problem').forEach(prob => {
+        prob.style.animationPlayState = 'running';
+      });
+      
+      document.getElementById('pause-btn').textContent = '⏸ 일시정지';
+      document.getElementById('answer-input').focus();
+      showScreen('game');
+    }
+
+    function quitGame() {
+      gameState.isPlaying = false;
+      stopTimers();
+      showScreen('start');
+    }
+
+    function endGame() {
+      gameState.isPlaying = false;
+      stopTimers();
+      
+      const difficulty = difficulties[gameState.difficulty];
+      document.getElementById('result-title').textContent = `점수: ${gameState.score}점!`;
+      document.getElementById('result-difficulty').textContent = difficulty.label;
+      document.getElementById('result-time').textContent = gameState.timeLeft + '초';
+      document.getElementById('result-max-combo').textContent = gameState.maxCombo;
+      document.getElementById('result-score').textContent = gameState.score;
+      
+      showScreen('result');
+    }
+
+    function resetGame() {
+      showScreen('start');
+    }
+
+    function showScreen(screen) {
+      ['start', 'game', 'result', 'pause'].forEach(s => {
+        document.getElementById('screen-' + s)?.classList.add('hidden');
+      });
+      
+      if (screen === 'pause') {
+        document.getElementById('screen-game').classList.remove('hidden');
+        document.getElementById('screen-pause').classList.remove('hidden');
+      } else {
+        document.getElementById('screen-' + screen).classList.remove('hidden');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('answer-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && gameState.isPlaying && !gameState.isPaused) {
+          checkAnswer();
+        }
+      });
+    });
+
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+  </script>
+ </body>
+</html>
